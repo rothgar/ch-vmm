@@ -1,0 +1,18 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "cpuset",
+    srcs = ["cpuset.go"],
+    importpath = "github.com/nalajala4naresh/ch-vmm/pkg/cpuset",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_opencontainers_runc//libcontainer/cgroups"],
+)
+
+go_test(
+    name = "cpuset_test",
+    srcs = ["cpuset_test.go"],
+    deps = [
+        ":cpuset",
+        "@com_github_stretchr_testify//require",
+    ],
+)

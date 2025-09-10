@@ -1,0 +1,19 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "cgroup",
+    srcs = [
+        "manager.go",
+        "v2_manager.go",
+    ],
+    importpath = "github.com/nalajala4naresh/ch-vmm/pkg/daemon/cgroup",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//api/v1beta1",
+        "//pkg/daemon/pid",
+        "@com_github_opencontainers_runc//libcontainer/cgroups",
+        "@com_github_opencontainers_runc//libcontainer/cgroups/fs2",
+        "@com_github_opencontainers_runc//libcontainer/configs",
+        "@com_github_opencontainers_runc//libcontainer/devices",
+    ],
+)

@@ -1,0 +1,39 @@
+apiVersion: cloudhypervisor.quill.today/v1beta1
+kind: VirtualMachine
+metadata:
+  name: ubuntu-ch
+  namespace: default
+spec:
+  instance:
+    kernel:
+      image: nalajalanaresh/ch-vmm-kernel:5.15
+      cmdline: "console=ttyS0 root=/dev/vda1 rw ds=nocloud"
+    memory:
+      size: 4Gi
+    pmem:
+      - name: scratch
+    disks:
+      - name: ubuntu
+      - name: cloud-init
+    interfaces:
+      - name: pod
+        masquerade: {}
+  volumes:
+    - name: scratch
+      persistentVolumeClaim:
+        claimName: blank-block-volume 
+    - name: ubuntu
+      dataVolume:
+        volumeName: ubuntu-ch-jammy
+
+    - name: cloud-init
+      cloudInit:
+        userData: |-
+          #cloud-config
+          password: password
+          chpasswd: { expire: False }
+          ssh_pwauth: True
+
+  networks:
+    - name: pod
+      pod: {}

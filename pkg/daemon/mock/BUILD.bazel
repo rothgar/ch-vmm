@@ -1,0 +1,9 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "mock",
+    srcs = ["relay_provider.go"],
+    importpath = "github.com/nalajala4naresh/ch-vmm/pkg/daemon/mock",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_golang_mock//gomock"],
+)

@@ -1,0 +1,8 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "cloudhypervisor",
+    srcs = ["client.go"],
+    importpath = "github.com/nalajala4naresh/ch-vmm/pkg/cloudhypervisor",
+    visibility = ["//visibility:public"],
+)

@@ -1,0 +1,14 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "log",
+    srcs = [
+        "file.go",
+        "file_hook.go",
+        "k8s.go",
+        "log.go",
+    ],
+    importpath = "github.com/nalajala4naresh/ch-vmm/pkg/util/log",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_sirupsen_logrus//:logrus"],
+)

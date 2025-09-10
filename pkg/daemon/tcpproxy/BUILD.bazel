@@ -1,0 +1,12 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "tcpproxy",
+    srcs = ["relay_provider.go"],
+    importpath = "github.com/nalajala4naresh/ch-vmm/pkg/daemon/tcpproxy",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/daemon",
+        "@af_inet_tcpproxy//:tcpproxy",
+    ],
+)
