@@ -1025,6 +1025,9 @@ type NetConfig struct {
     Mask string `json:"mask,omitempty"`
     Mtu int `json:"mtu,omitempty"`
     NumQueues int `json:"num_queues,omitempty"`
+    OffloadCsum bool `json:"offload_csum,omitempty"`
+    OffloadTso bool `json:"offload_tso,omitempty"`
+    OffloadUfo bool `json:"offload_ufo,omitempty"`
     PciSegment int16 `json:"pci_segment,omitempty"`
     QueueSize int `json:"queue_size,omitempty"`
     RateLimiterConfig *RateLimiterConfig `json:"rate_limiter_config,omitempty"`
@@ -1042,7 +1045,6 @@ type NumaConfig struct {
     GuestNumaId int `json:"guest_numa_id"`
     MemoryZones []string `json:"memory_zones,omitempty"`
     PciSegments []int `json:"pci_segments,omitempty"`
-    SgxEpcSections []string `json:"sgx_epc_sections,omitempty"`
 
 }
 
@@ -1144,14 +1146,6 @@ type SendMigrationData struct {
 
 }
 
-
-type SgxEpcConfig struct {
-    Id string `json:"id"`
-    Prefault bool `json:"prefault,omitempty"`
-    Size int64 `json:"size"`
-
-}
-
 // Defines a token bucket with a maximum capacity (_size_), an initial burst size (_one_time_burst_) and an interval for refilling purposes (_refill_time_). The refill-rate is derived from _size_ and _refill_time_, and it is the constant rate at which the tokens replenish. The refill process only starts happening after the initial burst budget is consumed. Consumption from the token bucket is unbounded in speed which allows for bursts bound in size by the amount of tokens available. Once the token bucket is empty, consumption speed is bound by the refill-rate.
 type TokenBucket struct {
     OneTimeBurst int64 `json:"one_time_burst,omitempty"`
@@ -1212,7 +1206,6 @@ type VmConfig struct {
     RateLimitGroups []*RateLimitGroupConfig `json:"rate_limit_groups,omitempty"`
     Rng *RngConfig `json:"rng,omitempty"`
     Serial *ConsoleConfig `json:"serial,omitempty"`
-    SgxEpc []*SgxEpcConfig `json:"sgx_epc,omitempty"`
     Tpm *TpmConfig `json:"tpm,omitempty"`
     Vdpa []*VdpaConfig `json:"vdpa,omitempty"`
     Vsock *VsockConfig `json:"vsock,omitempty"`

@@ -1,8 +1,0 @@
-load("@rules_go//go:def.bzl", "go_library")
-
-go_library(
-    name = "tlsutil",
-    srcs = ["tlsutil.go"],
-    importpath = "github.com/nalajala4naresh/ch-vmm/pkg/tlsutil",
-    visibility = ["//visibility:public"],
-)
