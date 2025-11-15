@@ -33,7 +33,7 @@ A few requirements need to be met before you can begin:
 - Kubernetes cluster v1.30+
 - Kubernetes apiserver must have `--allow-privileged=true` in order to run ch-vmm's privileged DaemonSet. It's usually set by default.
 - [cert-manager](https://cert-manager.io/)  v1.16 installed in Kubernetes cluster. You can install it with `kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.16.1/cert-manager.yaml`.
-- Deploy ch-vmm onto k8s cluster with ``` kubectl apply -f https://github.com/nalajala4naresh/ch-vmm/releases/download/v1.0.0/ch-vmm.yaml```
+- Deploy ch-vmm onto k8s cluster with ``` kubectl apply -f https://github.com/nalajala4naresh/ch-vmm/releases/download/v1.1.0/ch-vmm.yaml```
 - Deploy CDI operator to manage DataVolume objects as disks to the VM's 
 
   ```bash
