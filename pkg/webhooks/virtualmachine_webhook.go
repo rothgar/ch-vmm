@@ -136,6 +136,41 @@ func MutateVM(ctx context.Context, vm *types.VirtualMachine, oldVM *types.Virtua
 		}
 	}
 
+	// Default CPU and memory resources if not set (for general case, not just DedicatedCPUPlacement)
+	// This ensures Pods always have resource limits for vertical scaling
+	if !vm.Spec.Instance.CPU.DedicatedCPUPlacement {
+		if vm.Spec.Resources.Requests == nil {
+			vm.Spec.Resources.Requests = corev1.ResourceList{}
+		}
+		if vm.Spec.Resources.Limits == nil {
+			vm.Spec.Resources.Limits = corev1.ResourceList{}
+		}
+
+		// Calculate desired resources from VM instance spec
+		desiredCPU := resource.NewQuantity(int64(vm.Spec.Instance.CPU.Sockets*vm.Spec.Instance.CPU.CoresPerSocket), resource.DecimalSI)
+		memOverhead := resource.MustParse(memoryOverhead)
+		desiredMem := vm.Spec.Instance.Memory.Size.DeepCopy()
+		desiredMem.Add(memOverhead)
+
+		// Set CPU request if missing
+		if vm.Spec.Resources.Requests.Cpu().IsZero() {
+			vm.Spec.Resources.Requests[corev1.ResourceCPU] = *desiredCPU
+		}
+		// Set CPU limit if missing
+		if vm.Spec.Resources.Limits.Cpu().IsZero() {
+			vm.Spec.Resources.Limits[corev1.ResourceCPU] = *desiredCPU
+		}
+
+		// Set memory request if missing
+		if vm.Spec.Resources.Requests.Memory().IsZero() {
+			vm.Spec.Resources.Requests[corev1.ResourceMemory] = desiredMem
+		}
+		// Set memory limit if missing
+		if vm.Spec.Resources.Limits.Memory().IsZero() {
+			vm.Spec.Resources.Limits[corev1.ResourceMemory] = desiredMem
+		}
+	}
+
 	for i := range vm.Spec.Instance.Interfaces {
 		if vm.Spec.Instance.Interfaces[i].MAC == "" {
 			var macStr string
