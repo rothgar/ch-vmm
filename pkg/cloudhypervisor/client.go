@@ -621,6 +621,35 @@ func (c *Client) VmResize(ctx context.Context, arg *VmResize) error {
     return nil
 }
 
+// Resize a disk
+func (c *Client) VmResizeDisk(ctx context.Context, arg *VmResizeDisk) error {
+        reqBody, err := json.Marshal(arg)
+    if err != nil {
+        return fmt.Errorf("encode request: %s", err)
+    }
+    
+
+    req, err := http.NewRequestWithContext(ctx, "PUT", "http://localhost/api/v1/vm.resize-disk", bytes.NewBuffer(reqBody))
+    if err != nil {
+        return fmt.Errorf("build request: %s", err)
+    }
+
+    resp, err := c.httpClient.Do(req)
+    if err != nil {
+        return fmt.Errorf("do request: %s", err)
+    }
+    defer resp.Body.Close()
+
+    if resp.StatusCode >= 400 {
+        body, _ := io.ReadAll(resp.Body)
+        return fmt.Errorf("request failed: %d %s: %s", resp.StatusCode, http.StatusText(resp.StatusCode), string(body))
+    }
+
+    
+
+    return nil
+}
+
 // Resize a memory zone
 func (c *Client) VmResizeZone(ctx context.Context, arg *VmResizeZone) error {
         reqBody, err := json.Marshal(arg)
@@ -1244,6 +1273,13 @@ type VmResize struct {
     DesiredBalloon int64 `json:"desired_balloon,omitempty"`
     DesiredRam int64 `json:"desired_ram,omitempty"`
     DesiredVcpus int `json:"desired_vcpus,omitempty"`
+
+}
+
+
+type VmResizeDisk struct {
+    DesiredSize int64 `json:"desired_size,omitempty"`
+    Id string `json:"id,omitempty"`
 
 }
 

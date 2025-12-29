@@ -278,6 +278,81 @@ func (r *VMReconciler) chReconcile(ctx context.Context, vm *v1beta1.VirtualMachi
 	case v1beta1.VirtualMachineSnapShotInprogress:
 		// do not do anything as vm will go through pause and resume life cycle
 
+	case v1beta1.VirtualMachineResizeInProgress:
+		// Handle VM resize after Pod resize is complete
+		if vm.Status.Migration == nil {
+			if vm.Status.NodeName != r.NodeName {
+				return nil
+			}
+			chClient := getCloudHypervisorClient(vm)
+			vmInfo, err := chClient.VmInfo(ctx)
+			if err != nil {
+				return fmt.Errorf("get VM info: %s", err)
+			}
+
+			// Only resize if VM is Running or Paused
+			if vmInfo.State != "Running" && vmInfo.State != "Paused" {
+				ctrl.Log.Info("VM resize: VM is not in Running or Paused state, waiting",
+					"vm", vm.Name, "state", vmInfo.State)
+				return nil
+			}
+
+			// Calculate desired resources from VM spec
+			desiredVcpus := int(vm.Spec.Instance.CPU.Sockets * vm.Spec.Instance.CPU.CoresPerSocket)
+			desiredRam := vm.Spec.Instance.Memory.Size.Value() // Size is in bytes
+
+			// Get current VM resources
+			currentVcpus := vmInfo.Config.Cpus.BootVcpus
+			currentRam := vmInfo.MemoryActualSize // This is the actual memory in bytes
+
+			// Check if resize is needed
+			needsResize := false
+			if currentVcpus != desiredVcpus {
+				needsResize = true
+				ctrl.Log.Info("VM resize: CPU change detected",
+					"vm", vm.Name, "current", currentVcpus, "desired", desiredVcpus)
+			}
+
+			// Allow 5% tolerance for memory to account for rounding
+			memoryTolerance := int64(float64(desiredRam) * 0.05)
+			memoryDiff := currentRam - desiredRam
+			if memoryDiff < 0 {
+				memoryDiff = -memoryDiff
+			}
+			if memoryDiff > memoryTolerance {
+				needsResize = true
+				ctrl.Log.Info("VM resize: Memory change detected",
+					"vm", vm.Name, "current", currentRam, "desired", desiredRam)
+			}
+
+			if needsResize {
+				resizeReq := &cloudhypervisor.VmResize{
+					DesiredVcpus: desiredVcpus,
+					DesiredRam:   desiredRam,
+				}
+
+				if err := chClient.VmResize(ctx, resizeReq); err != nil {
+					r.Recorder.Eventf(vm, corev1.EventTypeWarning, "VMResizeFailed",
+						"Failed to resize VM: %s", err)
+					return fmt.Errorf("resize VM: %s", err)
+				}
+
+				ctrl.Log.Info("VM resize: Resize request sent to Cloud Hypervisor",
+					"vm", vm.Name, "vcpus", desiredVcpus, "ram", desiredRam)
+				r.Recorder.Eventf(vm, corev1.EventTypeNormal, "VMResizeInitiated",
+					"VM resize initiated: vCPUs=%d, RAM=%d bytes", desiredVcpus, desiredRam)
+				// Will be checked in next reconcile to verify resize completed
+				return nil
+			}
+
+			// Resize is complete, transition back to Running
+			vm.Status.Phase = v1beta1.VirtualMachineRunning
+			ctrl.Log.Info("VM resize: Resize completed, transitioning to Running",
+				"vm", vm.Name)
+			r.Recorder.Eventf(vm, corev1.EventTypeNormal, "VMResizeCompleted",
+				"VM resize completed successfully")
+		}
+
 	case v1beta1.VirtualMachineRunning:
 		if vm.Status.Migration == nil {
 			if vm.Status.NodeName != r.NodeName {

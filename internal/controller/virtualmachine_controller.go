@@ -294,6 +294,13 @@ func (r *VirtualMachineReconciler) reconcile(ctx context.Context, vm *v1beta1.Vi
 				return err
 			}
 		}
+	case v1beta1.VirtualMachinePodResizeInProgress:
+		// Handle VM resize in progress
+		// Resize Pod resources, then wait for Pod resize to complete, then resize VM
+		if err := r.reconcileVMPodResize(ctx, vm); err != nil {
+			return fmt.Errorf("reconcile VM resize: %w", err)
+		}
+
 	case v1beta1.VirtualMachineRunning:
 		var vmPod corev1.Pod
 		vmPodKey := types.NamespacedName{
@@ -329,6 +336,13 @@ func (r *VirtualMachineReconciler) reconcile(ctx context.Context, vm *v1beta1.Vi
 		}
 		if vm.Status.Phase != v1beta1.VirtualMachineRunning {
 			return nil
+		}
+
+		// Check for CPU/memory changes by comparing with Pod actual resources
+		if !vmPodNotFound {
+			if err := r.checkAndSetResizePhase(ctx, vm, &vmPod); err != nil {
+				return err
+			}
 		}
 
 		if err := r.reconcileVMConditions(ctx, vm, &vmPod); err != nil {
@@ -460,6 +474,69 @@ func (r *VirtualMachineReconciler) reconcile(ctx context.Context, vm *v1beta1.Vi
 
 }
 
+// checkAndSetResizePhase detects CPU/memory changes by comparing VM spec with Pod actual resources
+// Uses Pod status.containerStatuses[].resources (K8s 1.35+) to get actual running resources
+func (r *VirtualMachineReconciler) checkAndSetResizePhase(ctx context.Context, vm *v1beta1.VirtualMachine, vmPod *corev1.Pod) error {
+
+	// Only check if VM is in Running phase
+	if vm.Status.Phase != v1beta1.VirtualMachineRunning {
+		return nil
+	}
+
+	// Skip if already in resize phase
+	if vm.Status.Phase == v1beta1.VirtualMachinePodResizeInProgress {
+		return nil
+	}
+
+	// Get actual resources from Pod status (K8s 1.35+ feature)
+	var actualResources *corev1.ResourceRequirements
+	for i := range vmPod.Status.ContainerStatuses {
+		if vmPod.Status.ContainerStatuses[i].Name == "vm-manager" {
+			if vmPod.Status.ContainerStatuses[i].Resources != nil {
+				actualResources = vmPod.Status.ContainerStatuses[i].Resources
+				break
+			}
+		}
+	}
+
+	if actualResources == nil {
+		return errors.New("k8s is not 1.35 version and ContainerStatuses does not contain Resources")
+	}
+
+	// Calculate desired resources from VM spec
+	desiredCPU := resource.NewQuantity(int64(vm.Spec.Instance.CPU.Sockets*vm.Spec.Instance.CPU.CoresPerSocket), resource.DecimalSI)
+	memOverhead := resource.MustParse("256Mi")
+	desiredMem := vm.Spec.Instance.Memory.Size.DeepCopy()
+	desiredMem.Add(memOverhead)
+
+	// Get actual resources from Pod
+	actualCPU := actualResources.Requests[corev1.ResourceCPU]
+	actualMem := actualResources.Requests[corev1.ResourceMemory]
+
+	// Check if CPU or memory changed
+	cpuChanged := actualCPU.IsZero() || !actualCPU.Equal(*desiredCPU)
+	memoryChanged := actualMem.IsZero() || !actualMem.Equal(desiredMem)
+
+	if cpuChanged || memoryChanged {
+		vm.Status.Phase = v1beta1.VirtualMachinePodResizeInProgress
+		ctrl.Log.Info("VM resize initiated: Pod actual resources differ from VM spec",
+			"vm", vm.Name,
+			"cpuChanged", cpuChanged,
+			"memoryChanged", memoryChanged,
+			"actualCPU", actualCPU.String(),
+			"desiredCPU", desiredCPU.String(),
+			"actualMem", actualMem.String(),
+			"desiredMem", desiredMem.String())
+
+		r.Recorder.Eventf(vm, corev1.EventTypeNormal, "VMResizeInitiated",
+			"VM resize initiated: CPU=%s->%s, Memory=%s->%s",
+			actualCPU.String(), desiredCPU.String(),
+			actualMem.String(), desiredMem.String())
+	}
+
+	return nil
+}
+
 func (r *VirtualMachineReconciler) reconcileVMConditions(ctx context.Context, vm *v1beta1.VirtualMachine, vmPod *corev1.Pod) error {
 	for _, condition := range vmPod.Status.Conditions {
 		if condition.Type == corev1.PodReady {
@@ -483,6 +560,162 @@ func (r *VirtualMachineReconciler) reconcileVMConditions(ctx context.Context, vm
 		}
 		meta.SetStatusCondition(&vm.Status.Conditions, *migratableCondition)
 	}
+	return nil
+}
+
+// reconcileVMResize handles the VMResizeInProgress phase
+// It resizes the Pod, waits for Pod resize to complete, then the daemon will resize the VM
+func (r *VirtualMachineReconciler) reconcileVMPodResize(ctx context.Context, vm *v1beta1.VirtualMachine) error {
+	var vmPod corev1.Pod
+	vmPodKey := types.NamespacedName{
+		Name:      vm.Status.VMPodName,
+		Namespace: vm.Namespace,
+	}
+	if vmPodKey.Namespace == "" {
+		vmPodKey.Namespace = "default"
+	}
+
+	if err := r.Get(ctx, vmPodKey, &vmPod); err != nil {
+		if apierrors.IsNotFound(err) {
+			vm.Status.Phase = v1beta1.VirtualMachineFailed
+			return nil
+		}
+		return fmt.Errorf("get VM Pod: %w", err)
+	}
+
+	// Check Pod resize status
+	if vmPod.Status.Resize == corev1.PodResizeStatusInProgress {
+		ctrl.Log.Info("VM resize: Pod resize in progress, waiting",
+			"vm", vm.Name, "pod", vmPod.Name)
+
+		return nil
+	}
+
+	if vmPod.Status.Resize == corev1.PodResizeStatusInfeasible {
+		ctrl.Log.Info("VM resize: Pod resize infeasible",
+			"vm", vm.Name, "pod", vmPod.Name)
+		r.Recorder.Eventf(vm, corev1.EventTypeWarning, "VMPodResizeInfeasible",
+			"Pod resize is infeasible, cannot resize VM")
+		// Transition back to Running
+		vm.Status.Phase = v1beta1.VirtualMachineRunning
+		return nil
+	}
+
+	// Calculate desired Pod resources from VM spec
+	desiredCPU := resource.NewQuantity(int64(vm.Spec.Instance.CPU.Sockets*vm.Spec.Instance.CPU.CoresPerSocket), resource.DecimalSI)
+
+	// Calculate memory: VM memory + overhead
+	memOverhead := resource.MustParse("256Mi")
+	desiredMem := vm.Spec.Instance.Memory.Size.DeepCopy()
+	desiredMem.Add(memOverhead)
+
+	// Get current Pod resources (use actual if available, otherwise spec)
+	var currentResources *corev1.ResourceRequirements
+	for i := range vmPod.Status.ContainerStatuses {
+		if vmPod.Status.ContainerStatuses[i].Name == "vm-manager" {
+			if vmPod.Status.ContainerStatuses[i].Resources != nil {
+				currentResources = vmPod.Status.ContainerStatuses[i].Resources
+				break
+			}
+		}
+	}
+
+	// Fallback to spec if no actual resources
+	if currentResources == nil {
+		for i := range vmPod.Spec.Containers {
+			if vmPod.Spec.Containers[i].Name == "vm-manager" {
+				currentResources = &vmPod.Spec.Containers[i].Resources
+				break
+			}
+		}
+	}
+
+	if currentResources == nil {
+		return nil
+	}
+
+	// Check if Pod resources need to be updated
+	needsPodResize := false
+	currentCPU := currentResources.Requests[corev1.ResourceCPU]
+	currentMem := currentResources.Requests[corev1.ResourceMemory]
+
+	if currentCPU.IsZero() || !currentCPU.Equal(*desiredCPU) {
+		needsPodResize = true
+	}
+
+	if currentMem.IsZero() || !currentMem.Equal(desiredMem) {
+		needsPodResize = true
+	}
+
+	if needsPodResize {
+		// Use Pod resize subresource (Kubernetes 1.35+)
+		// Create a Pod with only the container resources we want to update
+		podResizePatch := vmPod.DeepCopy()
+
+		// Find and update the vm-manager container resources
+		for i := range podResizePatch.Spec.Containers {
+			if podResizePatch.Spec.Containers[i].Name == "vm-manager" {
+				if podResizePatch.Spec.Containers[i].Resources.Requests == nil {
+					podResizePatch.Spec.Containers[i].Resources.Requests = make(corev1.ResourceList)
+				}
+				if podResizePatch.Spec.Containers[i].Resources.Limits == nil {
+					podResizePatch.Spec.Containers[i].Resources.Limits = make(corev1.ResourceList)
+				}
+
+				podResizePatch.Spec.Containers[i].Resources.Requests[corev1.ResourceCPU] = *desiredCPU
+				podResizePatch.Spec.Containers[i].Resources.Requests[corev1.ResourceMemory] = desiredMem
+				podResizePatch.Spec.Containers[i].Resources.Limits[corev1.ResourceCPU] = *desiredCPU
+				podResizePatch.Spec.Containers[i].Resources.Limits[corev1.ResourceMemory] = desiredMem
+				break
+			}
+		}
+
+		// Use resize subresource via SubResource client
+		if err := r.SubResource("resize").Update(ctx, podResizePatch, &client.SubResourceUpdateOptions{}); err != nil {
+			if apierrors.IsConflict(err) {
+				// Conflict is expected, will be retried
+				return nil
+			}
+			r.Recorder.Eventf(vm, corev1.EventTypeWarning, "VMResizeFailed",
+				"Failed to resize Pod via resize subresource: %s", err)
+			return fmt.Errorf("resize Pod for VM resize: %w", err)
+		}
+
+		r.Recorder.Eventf(vm, corev1.EventTypeNormal, "VMResizePodInitiated",
+			"Pod resize initiated via resize subresource: CPU=%s, Memory=%s", desiredCPU.String(), desiredMem.String())
+		return nil
+	}
+
+	// Check if Pod resize is complete by comparing actual resources
+	var actualResources *corev1.ResourceRequirements
+	for i := range vmPod.Status.ContainerStatuses {
+		if vmPod.Status.ContainerStatuses[i].Name == "vm-manager" {
+			if vmPod.Status.ContainerStatuses[i].Resources != nil {
+				actualResources = vmPod.Status.ContainerStatuses[i].Resources
+				break
+			}
+		}
+	}
+
+	if actualResources == nil {
+		// No actual resources yet, wait
+		return nil
+	}
+
+	// Verify actual resources match desired
+	actualCPU := actualResources.Requests[corev1.ResourceCPU]
+	actualMem := actualResources.Requests[corev1.ResourceMemory]
+
+	if actualCPU.Equal(*desiredCPU) && actualMem.Equal(desiredMem) {
+		// Pod resize is complete, transition back to Running
+		// The daemon will detect the change and resize the VM
+		vm.Status.Phase = v1beta1.VirtualMachineResizeInProgress
+		ctrl.Log.Info("VM resize: Pod resize completed, transitioning to Running",
+			"vm", vm.Name)
+		r.Recorder.Eventf(vm, corev1.EventTypeNormal, "VMResizeInProgress",
+			"Pod resize completed, VM resize will be handled by daemon")
+	}
+
 	return nil
 }
 
