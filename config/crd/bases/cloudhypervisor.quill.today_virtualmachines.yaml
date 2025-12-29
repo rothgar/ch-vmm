@@ -1707,6 +1707,10 @@ spec:
                 - Succeeded
                 - Failed
                 - Unknown
+                - PodResizeInProgress
+                - ResizeInProgress
+                - PodResizeDeferred
+                - PodResizeInfeasible
                 - SnapshotInprogress
                 - VMRestoreInProgress
                 - Paused
