@@ -13,7 +13,7 @@ Compared to [KubeVirt](https://github.com/kubevirt/kubevirt), ch-vmm:
 
 Compared to [VirtInk](https://github.com/smartxworks/virtink), ch-vmm:
 - does support snapshot and restore features
-- Supports newer version k8s controller-runtime and k8s versions &  cloud-hypervisor v45.0
+- Supports newer version k8s controller-runtime and k8s versions &  cloud-hypervisor v50.0
 - `VMPool` and `VMSet` to manage fleet of VM's, checkout docs folder for examples. 
 
 ch-vmm consists of 3 components:
@@ -30,7 +30,8 @@ ch-vmm consists of 3 components:
 
 A few requirements need to be met before you can begin:
 
-- Kubernetes cluster v1.30+
+- Kubernetes Version v1.35+ (In-place vertical scaling of VM with release v1.2.0)
+- Kubernetes Version < v1.35 , please use release v1.1.0
 - Kubernetes apiserver must have `--allow-privileged=true` in order to run ch-vmm's privileged DaemonSet. It's usually set by default.
 - [cert-manager](https://cert-manager.io/)  v1.16 installed in Kubernetes cluster. You can install it with `kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.16.1/cert-manager.yaml`.
 - Deploy ch-vmm onto k8s cluster with ``` kubectl apply -f https://github.com/nalajala4naresh/ch-vmm/releases/download/v1.1.0/ch-vmm.yaml```
@@ -47,7 +48,7 @@ ch-vmm currently supports the following container runtimes:
 
 - Docker
 - containerd
-- cloud-hypervisor v45.0 is supported.
+- cloud-hypervisor v50.0 is supported.
 
 Other container runtimes, which do not use virtualization features, should work too. However, they are not tested officially.
 
