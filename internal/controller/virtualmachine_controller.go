@@ -65,6 +65,7 @@ type VirtualMachineReconciler struct {
 
 // +kubebuilder:rbac:groups=cloudhypervisor.quill.today,resources=virtualmachines,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=cloudhypervisor.quill.today,resources=virtualmachines/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups="",resources=pods/resize,verbs=update
 // +kubebuilder:rbac:groups=cloudhypervisor.quill.today,resources=virtualmachines/finalizers,verbs=update
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;update;patch
 // +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch;create;update;patch;delete

@@ -37,7 +37,13 @@ rules:
   - list
   - patch
   - update
-  - watch 
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - pods/resize
+  verbs:
+  - update 
 - apiGroups:
   - cloudhypervisor.quill.today
   resources:
