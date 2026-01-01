@@ -42,6 +42,12 @@ A few requirements need to be met before you can begin:
   $ kubectl create -f https://github.com/kubevirt/containerized-data-importer/releases/download/$VERSION/cdi-operator.yaml
   $ kubectl create -f https://github.com/kubevirt/containerized-data-importer/releases/download/$VERSION/cdi-cr.yaml
   ```
+
+- Deploy external snapshotter for disk management features
+``` bash
+
+$ kubectl -n kube-system kustomize deploy/kubernetes/snapshot-controller | kubectl create -f -
+```
 #### Container Runtime Support
 
 ch-vmm currently supports the following container runtimes:

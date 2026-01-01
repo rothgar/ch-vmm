@@ -1007,6 +1007,20 @@ spec:
                       - name
                       type: object
                     type: array
+                  gpus:
+                    items:
+                      properties:
+                        name:
+                          type: string
+                        resourceEnvName:
+                          type: string
+                        resourceName:
+                          type: string
+                      required:
+                      - name
+                      - resourceName
+                      type: object
+                    type: array
                   interfaces:
                     items:
                       properties:
