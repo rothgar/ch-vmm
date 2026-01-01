@@ -263,7 +263,7 @@ func buildChVMConfig(ctx context.Context, vm *v1beta1.VirtualMachine) (*cloudhyp
 			pciAddr = strings.TrimSpace(pciAddr)
 
 			chDeviceConfig := cloudhypervisor.DeviceConfig{
-				Id:   fmt.Sprintf("%s-%s", gpu.Name, i),
+				Id:   fmt.Sprintf("%s-%d", gpu.Name, i),
 				Path: fmt.Sprintf("/sys/bus/pci/devices/%s", pciAddr),
 			}
 
