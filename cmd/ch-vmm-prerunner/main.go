@@ -250,29 +250,25 @@ func buildChVMConfig(ctx context.Context, vm *v1beta1.VirtualMachine) (*cloudhyp
 	}
 
 	//GPU Device Config for cloud-hypervisor VM config
-	// Tracks the next PCI index to consume per resource name
-	pciCursorByResource := map[string]int{}
-
-	nextPCIIndex := func(resourceName string) int {
-		index := pciCursorByResource[resourceName]
-		pciCursorByResource[resourceName] = index + 1
-		return index
-	}
-
 	for _, gpu := range vm.Spec.Instance.GPUs {
-		pciAddressList := strings.Split(os.Getenv(gpu.ResourceEnvName), ",")
-
-		pciIndex := nextPCIIndex(gpu.ResourceName)
-		if pciIndex >= len(pciAddressList) {
-			return nil, fmt.Errorf("failed to get PCI address for %s", gpu.Name)
+		envVal := os.Getenv(gpu.ResourceEnvName)
+		if envVal == "" {
+			return nil, fmt.Errorf("missing env var %s for GPU %s",
+				gpu.ResourceEnvName, gpu.Name)
 		}
 
-		chDeviceConfig := cloudhypervisor.DeviceConfig{
-			Id:   gpu.Name,
-			Path: fmt.Sprintf("/sys/bus/pci/devices/%s", pciAddressList[pciIndex]),
-		}
+		pciAddresses := strings.Split(envVal, ",")
 
-		vmConfig.Devices = append(vmConfig.Devices, &chDeviceConfig)
+		for i, pciAddr := range pciAddresses {
+			pciAddr = strings.TrimSpace(pciAddr)
+
+			chDeviceConfig := cloudhypervisor.DeviceConfig{
+				Id:   fmt.Sprintf("%s-%s", gpu.Name, i),
+				Path: fmt.Sprintf("/sys/bus/pci/devices/%s", pciAddr),
+			}
+
+			vmConfig.Devices = append(vmConfig.Devices, &chDeviceConfig)
+		}
 	}
 
 	for _, fs := range vm.Spec.Instance.FileSystems {
