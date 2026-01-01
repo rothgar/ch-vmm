@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"reflect"
+	"strings"
 
 	types "github.com/nalajala4naresh/chvmm-api/v1beta1"
 	corev1 "k8s.io/api/core/v1"
@@ -168,6 +169,18 @@ func MutateVM(ctx context.Context, vm *types.VirtualMachine, oldVM *types.Virtua
 		// Set memory limit if missing
 		if vm.Spec.Resources.Limits.Memory().IsZero() {
 			vm.Spec.Resources.Limits[corev1.ResourceMemory] = desiredMem
+		}
+	}
+
+	// Adding GPU Default ResourceEnvName
+	for i := range vm.Spec.Instance.GPUs {
+		if vm.Spec.Instance.GPUs[i].ResourceEnvName == "" {
+			if strings.Contains(vm.Spec.Instance.GPUs[i].ResourceName, "nvidia.com/") {
+				deviceName := strings.TrimPrefix(vm.Spec.Instance.GPUs[i].ResourceName, "nvidia.com/")
+				vm.Spec.Instance.GPUs[i].ResourceEnvName = fmt.Sprintf("PCI_RESOURCE_NVIDIA_COM_%s", deviceName)
+
+			}
+
 		}
 	}
 
@@ -344,6 +357,10 @@ func ValidateInstance(ctx context.Context, instance *types.Instance, fieldPath *
 		errList = append(errList, ValidateInterface(ctx, &iface, fieldPath.Child("interfaces").Index(i))...)
 	}
 
+	for i, gpu := range instance.GPUs {
+		errList = append(errList, ValidateGPU(ctx, &gpu, fieldPath.Child("gpus").Index(i))...)
+	}
+
 	return errList
 }
 
@@ -402,6 +419,19 @@ func ValidateDisk(ctx context.Context, disk *types.Disk, fieldPath *field.Path) 
 	}
 
 	return errList
+}
+
+func ValidateGPU(ctx context.Context, gpu *types.GPU, fieldPath *field.Path) field.ErrorList {
+	var errs field.ErrorList
+	if gpu == nil {
+		errs = append(errs, field.Required(fieldPath, ""))
+		return errs
+	}
+
+	if gpu.ResourceEnvName == "" {
+		errs = append(errs, field.Required(fieldPath.Child("resourceEnvName"), ""))
+	}
+	return errs
 }
 
 func ValidateFileSystem(ctx context.Context, fs *types.FileSystem, fieldPath *field.Path) field.ErrorList {

@@ -1396,6 +1396,10 @@ func (r *VirtualMachineReconciler) buildVMPod(ctx context.Context, vm *v1beta1.V
 		vmPod.Spec.Containers[0].Env = append(vmPod.Spec.Containers[0].Env, corev1.EnvVar{Name: "BLOCK_VOLUMES", Value: strings.Join(blockVolumes, ",")})
 	}
 
+	for _, gpu := range vm.Spec.Instance.GPUs {
+		incrementContainerResource(&vmPod.Spec.Containers[0], gpu.ResourceName)
+	}
+
 	var networks []netv1.NetworkSelectionElement
 	numOfUserspaceIface := 0
 	for i, network := range vm.Spec.Networks {

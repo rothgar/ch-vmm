@@ -249,6 +249,32 @@ func buildChVMConfig(ctx context.Context, vm *v1beta1.VirtualMachine) (*cloudhyp
 		}
 	}
 
+	//GPU Device Config for cloud-hypervisor VM config
+	// Tracks the next PCI index to consume per resource name
+	pciCursorByResource := map[string]int{}
+
+	nextPCIIndex := func(resourceName string) int {
+		index := pciCursorByResource[resourceName]
+		pciCursorByResource[resourceName] = index + 1
+		return index
+	}
+
+	for _, gpu := range vm.Spec.Instance.GPUs {
+		pciAddressList := strings.Split(os.Getenv(gpu.ResourceEnvName), ",")
+
+		pciIndex := nextPCIIndex(gpu.ResourceName)
+		if pciIndex >= len(pciAddressList) {
+			return nil, fmt.Errorf("failed to get PCI address for %s", gpu.Name)
+		}
+
+		chDeviceConfig := cloudhypervisor.DeviceConfig{
+			Id:   gpu.Name,
+			Path: fmt.Sprintf("/sys/bus/pci/devices/%s", pciAddressList[pciIndex]),
+		}
+
+		vmConfig.Devices = append(vmConfig.Devices, &chDeviceConfig)
+	}
+
 	for _, fs := range vm.Spec.Instance.FileSystems {
 		vmConfig.Memory.Shared = true
 
