@@ -179,7 +179,8 @@ ch-vmm supports GPU passthrough to VMs using VFIO (Virtual Function I/O). This a
 
 #### Prerequisites
 
-- GPU device plugin installed in the cluster (e.g., [NVIDIA Device Plugin](https://github.com/NVIDIA/k8s-device-plugin) or custom device plugin)
+
+- GPU device plugin installed in the cluster (e.g., [NVIDIA Kubevirt Device Plugin](https://github.com/NVIDIA/kubevirt-gpu-device-plugin) or custom device plugin)
 - IOMMU enabled on the host system (add `intel_iommu=on` or `amd_iommu=on` to kernel boot parameters)
 - GPU devices must be bound to `vfio-pci` driver on the host nodes
 - The GPU must be exposed as a Kubernetes extended resource (e.g., `nvidia.com/GP104_GEFORCE_GTX_1080`)
