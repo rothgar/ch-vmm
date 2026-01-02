@@ -173,6 +173,53 @@ kubectl patch vm $VM_NAME --subresource=status --type=merge -p "{\"status\":{\"p
 ```
 You can also `Shutdown`, `Reset`, `Reboot` or `Pause` a running VM, or `Resume` a paused one. To start a powered-off VM, you can `PowerOn` it.
 
+### VFIO GPU Passthrough
+
+ch-vmm supports GPU passthrough to VMs using VFIO (Virtual Function I/O). This allows VMs to directly access physical GPU devices for high-performance workloads such as machine learning, graphics rendering, or GPU-accelerated computing.
+
+#### Prerequisites
+
+- GPU device plugin installed in the cluster (e.g., [NVIDIA Device Plugin](https://github.com/NVIDIA/k8s-device-plugin) or custom device plugin)
+- IOMMU enabled on the host system (add `intel_iommu=on` or `amd_iommu=on` to kernel boot parameters)
+- GPU devices must be bound to `vfio-pci` driver on the host nodes
+- The GPU must be exposed as a Kubernetes extended resource (e.g., `nvidia.com/GP104_GEFORCE_GTX_1080`)
+
+#### Creating a VM with GPU Passthrough
+
+To create a VM with GPU passthrough, specify the GPU in the VM spec:
+
+```yaml
+apiVersion: cloudhypervisor.quill.today/v1beta1
+kind: VirtualMachine
+metadata:
+  name: ubuntu-ch
+  namespace: default
+spec:
+  instance:
+    kernel:
+      image: nalajalanaresh/ch-vmm-kernel:5.15
+      cmdline: "console=ttyS0 root=/dev/vda1 rw ds=nocloud"
+    memory:
+      size: 4Gi
+    gpus:
+      - name: geforce
+        resourceName: nvidia.com/GP104_GEFORCE_GTX_1080  # Change to your GPU resource name
+    disks:
+      - name: ubuntu
+    interfaces:
+      - name: pod
+  volumes:
+    - name: ubuntu
+      dataVolume:
+        volumeName: ubuntu-ch-jammy
+  networks:
+    - name: pod
+      pod: {}
+```
+
+The `resourceName` should match the extended resource name exposed by your GPU device plugin. For NVIDIA GPUs, the webhook automatically sets the `resourceEnvName` if it's not specified. The GPU device will be passed through to the VM using VFIO, allowing the guest OS to directly access the physical GPU hardware.
+
+**Note**: Ensure that the GPU device plugin is properly configured and the GPU resources are available on the target node before creating the VM.
 
 ### Relation to Virtink Project
 

@@ -12,6 +12,9 @@ spec:
       size: 4Gi
     pmem:
       - name: scratch
+    gpus:
+      - name: geforce
+        resourceName: nvidia.com/GP104_GEFORCE_GTX_1080 #change this to your GPU resource name
     disks:
       - name: ubuntu
       - name: cloud-init
